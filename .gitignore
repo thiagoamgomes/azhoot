@@ -1,0 +1,29 @@
+node_modules
+dist
+coverage
+.turbo
+.env
+.env.*
+!.env.example
+/uploads/
+apps/api/uploads/
+playwright-report
+test-results
+*.log
+.DS_Store
+dump.rdb
+
+# Pacotes de sincronização Claude ↔ pasta local (não versionar)
+*.tar.gz
+
+# Saídas do Claude — apenas na máquina local
+Claude outputs/
+
+# Itens internos / de desenvolvimento — manter apenas local
+.claude/
+CLAUDE.md
+.vscode/
+package-lock.json
+docs/marketing/
+.github/workflows/deploy.yml
+docs/

@@ -1,0 +1,61 @@
+{
+  "name": "azhoot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AZhoot \u2014 plataforma privada de quizzes e apresenta\u00e7\u00f5es interativas em tempo real",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test --concurrency=1",
+    "test:e2e": "pnpm --filter @azhoot/web test:e2e",
+    "test:load": "pnpm --filter @azhoot/api test:load",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @azhoot/db generate",
+    "db:migrate": "pnpm --filter @azhoot/db migrate",
+    "db:migrate:deploy": "pnpm --filter @azhoot/db migrate:deploy",
+    "db:seed": "pnpm --filter @azhoot/db seed",
+    "db:reset": "pnpm --filter @azhoot/db reset",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "redis:up": "docker compose -f docker-compose.dev.yml up -d --wait",
+    "redis:down": "docker compose -f docker-compose.dev.yml down",
+    "prod:build": "docker compose --env-file .env.production -f docker-compose.prod.yml build",
+    "prod:up": "docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build",
+    "prod:down": "docker compose --env-file .env.production -f docker-compose.prod.yml down",
+    "prod:logs": "docker compose --env-file .env.production -f docker-compose.prod.yml logs -f",
+    "prod:seed": "docker compose --env-file .env.production -f docker-compose.prod.yml run --rm -e RUN_MIGRATIONS=0 --entrypoint sh api -lc \"node_modules/.bin/tsx prisma/seed.ts\"",
+    "prod:make-owner": "docker compose --env-file .env.production -f docker-compose.prod.yml run --rm --entrypoint node api /app/prisma/scripts/make-owner.mjs",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "husky": "9.1.7",
+    "lint-staged": "17.5.1",
+    "prettier": "3.9.9",
+    "turbo": "2.9.18",
+    "typescript": "5.9.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs,json,md,css,yml,yaml}": "prettier --write"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
+      "esbuild",
+      "prisma",
+      "sharp"
+    ],
+    "overrides": {
+      "deepmerge-ts": "^8.0.2",
+      "uuid": "^11.1.1"
+    }
+  }
+}

@@ -1,0 +1,98 @@
+# AZhoot — produção. Postgres + Redis (com senha) + API + Web.
+# Sem nginx/traefik: o proxy reverso é o seu nginx no host.
+# As portas da API e da Web ficam presas em 127.0.0.1 para o nginx do host acessar.
+#
+# Subir:   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+# Logs:    docker compose --env-file .env.production -f docker-compose.prod.yml logs -f
+# Parar:   docker compose --env-file .env.production -f docker-compose.prod.yml down
+name: azhoot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [azhoot]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD}']
+    environment:
+      # Permite ao redis-cli do healthcheck autenticar sem expor a senha na linha de comando.
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    networks: [azhoot]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      # Somente localhost: seu nginx encaminha /api, /uploads e /socket.io para cá.
+      - '127.0.0.1:${API_PORT:-3333}:3333'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3333/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks: [azhoot]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Origem da API embutida na SPA (browser chama este host).
+        VITE_API_URL: ${VITE_API_URL}
+    restart: unless-stopped
+    environment:
+      PORT: '8080'
+    depends_on:
+      - api
+    ports:
+      # Somente localhost: seu nginx serve o restante do domínio a partir daqui.
+      - '127.0.0.1:${WEB_PORT:-8080}:8080'
+    networks: [azhoot]
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+
+networks:
+  azhoot:
+    driver: bridge

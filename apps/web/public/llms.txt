@@ -1,0 +1,28 @@
+# AZhoot
+
+> Plataforma brasileira de quizzes e apresentações interativas ao vivo. O apresentador cria um quiz, compartilha um PIN (ou QR Code) e o público responde pelo celular, com ranking, pódio e relatório em tempo real.
+
+AZhoot ("de A a Z") é um SaaS em português do Brasil para tornar apresentações interativas em eventos, aulas, treinamentos, reuniões e dinâmicas. Os participantes entram pelo navegador do celular, sem instalar aplicativo e sem criar conta — apenas com o PIN e um apelido. O servidor controla o cronômetro e a pontuação.
+
+## Principais recursos
+- Quizzes ao vivo com PIN de 6 dígitos e QR Code.
+- Tipos de pergunta: única escolha, múltipla escolha, verdadeiro/falso e enquete.
+- Ranking e pódio ao vivo; resultados individuais são privados.
+- Relatórios com exportação em CSV e XLSX.
+- Geração de perguntas com IA a partir de um tema ou de anexos (PDF, DOCX, Excel, imagem).
+- Multi-conta (SaaS) com planos Gratuito, Mensal e Anual.
+
+## Planos
+- Gratuito: para começar, com limites de quizzes, participantes e usuários.
+- Mensal e Anual: mais quizzes, mais participantes por sessão e mais usuários.
+- Créditos de IA avulsos (não expiram) para gerar perguntas.
+
+## Links
+- Site: https://azhoot.com.br/
+- Criar conta: https://azhoot.com.br/cadastro
+- Entrar: https://azhoot.com.br/login
+
+## Perguntas frequentes
+- Precisa instalar app? Não; os participantes usam o navegador do celular com o PIN.
+- É gratuito? Sim, há plano gratuito; planos pagos ampliam limites e recursos.
+- Gera perguntas com IA? Sim, por tema ou anexando documentos e imagens.

@@ -1,0 +1,22 @@
+# Sobe somente o Redis para desenvolvimento local.
+# Uso: pnpm redis:up  (ou docker compose -f docker-compose.dev.yml up -d)
+name: azhoot-dev
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: azhoot-redis-dev
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata-dev:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  redisdata-dev:

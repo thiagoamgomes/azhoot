@@ -1,0 +1,29 @@
+# AZhoot — robots
+User-agent: *
+Allow: /
+# Áreas privadas / sem valor para indexação
+Disallow: /master
+Disallow: /dashboard
+Disallow: /configuracoes
+Disallow: /relatorios
+Disallow: /apresentar
+Disallow: /jogar
+Disallow: /pagamento-simulado
+
+# Crawlers de IA (GEO) — liberados
+User-agent: GPTBot
+Allow: /
+User-agent: OAI-SearchBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Claude-Web
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://azhoot.com.br/sitemap.xml

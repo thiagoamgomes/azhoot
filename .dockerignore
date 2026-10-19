@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/coverage
+**/test-results
+**/playwright-report
+**/.playwright
+uploads
+*.log
+.env
+.env.*
+!.env.example
+*.tar.gz
+.vscode
+.idea

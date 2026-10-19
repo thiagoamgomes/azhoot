@@ -1,0 +1,606 @@
+// AZhoot — modelo de dados. Datas em UTC.
+
+generator client {
+  provider   = "prisma-client-js"
+  // Cliente sem binário Rust: usa o query compiler (WASM) + driver adapter `pg` (ADR 0002).
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  PRESENTER
+}
+
+enum QuizStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuizVersionStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  POLL
+}
+
+enum GameStatus {
+  LOBBY
+  COUNTDOWN
+  QUESTION_OPEN
+  QUESTION_LOCKED
+  REVEAL
+  LEADERBOARD
+  FINISHED
+  CANCELLED
+}
+
+enum ParticipantStatus {
+  ACTIVE
+  DISCONNECTED
+  REMOVED
+  BLOCKED
+}
+
+model User {
+  id                String    @id @default(uuid()) @db.Uuid
+  name              String
+  email             String    @unique
+  passwordHash      String
+  role              UserRole  @default(PRESENTER)
+  active            Boolean   @default(true)
+  canViewAllReports Boolean   @default(false)
+  /// Administrador da plataforma (painel master).
+  isMaster          Boolean   @default(false)
+  /// Exige troca de senha no próximo login (ex.: após reset pelo master).
+  mustChangePassword Boolean  @default(false)
+  accountId         String?   @db.Uuid
+  account           Account?  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  lastLoginAt       DateTime? @db.Timestamptz(3)
+
+  quizzes       Quiz[]
+  sessions      GameSession[]
+  adminSession  AdminSession[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@index([accountId])
+}
+
+model AdminSession {
+  id         String   @id @default(uuid()) @db.Uuid
+  tokenHash  String   @unique
+  csrfToken  String
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  lastSeenAt DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt  DateTime @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Quiz {
+  id                    String     @id @default(uuid()) @db.Uuid
+  accountId             String     @db.Uuid
+  account               Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  ownerId               String     @db.Uuid
+  owner                 User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title                 String
+  description           String?
+  coverImageUrl         String?
+  category              String?
+  status                QuizStatus @default(DRAFT)
+  currentDraftVersionId String?    @unique @db.Uuid
+  publishedVersionId    String?    @unique @db.Uuid
+  createdAt             DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime   @updatedAt @db.Timestamptz(3)
+  archivedAt            DateTime?  @db.Timestamptz(3)
+
+  versions QuizVersion[] @relation("QuizVersions")
+
+  @@index([status, updatedAt])
+  @@index([ownerId])
+  @@index([accountId, status])
+}
+
+model QuizVersion {
+  id            String            @id @default(uuid()) @db.Uuid
+  quizId        String            @db.Uuid
+  quiz          Quiz              @relation("QuizVersions", fields: [quizId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  status        QuizVersionStatus @default(DRAFT)
+  /// Snapshot de título/descrição no momento da publicação.
+  title         String
+  settings      Json              @default("{}")
+  publishedAt   DateTime?         @db.Timestamptz(3)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+
+  questions Question[]
+  sessions  GameSession[]
+
+  @@unique([quizId, versionNumber])
+}
+
+model Question {
+  id              String       @id @default(uuid()) @db.Uuid
+  quizVersionId   String       @db.Uuid
+  quizVersion     QuizVersion  @relation(fields: [quizVersionId], references: [id], onDelete: Cascade)
+  type            QuestionType
+  prompt          String
+  imageUrl        String?
+  durationSeconds Int
+  basePoints      Int
+  explanation     String?
+  position        Int
+
+  options Option[]
+  answers Answer[]
+
+  @@unique([quizVersionId, position])
+}
+
+model Option {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @db.Uuid
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  imageUrl   String?
+  isCorrect  Boolean  @default(false)
+  position   Int
+
+  @@unique([questionId, position])
+}
+
+model GameSession {
+  id                      String      @id @default(uuid()) @db.Uuid
+  accountId               String      @db.Uuid
+  account                 Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  quizVersionId           String      @db.Uuid
+  quizVersion             QuizVersion @relation(fields: [quizVersionId], references: [id], onDelete: Cascade)
+  hostUserId              String      @db.Uuid
+  host                    User        @relation(fields: [hostUserId], references: [id], onDelete: Cascade)
+  /// PIN só é preenchido enquanto a sessão está ativa (índice único parcial na migration).
+  pin                     String?
+  status                  GameStatus  @default(LOBBY)
+  /// Índice (base 0) na ordem da sessão (`questionOrder`).
+  currentQuestionPosition Int?
+  /// IDs das perguntas na ordem desta sessão (embaralhada ou não).
+  questionOrder           Json        @default("[]")
+  /// Mapa questionId -> ids das alternativas na ordem exibida.
+  optionOrder             Json        @default("{}")
+  settings                Json        @default("{}")
+  countdownEndsAt         DateTime?   @db.Timestamptz(3)
+  questionOpenedAt        DateTime?   @db.Timestamptz(3)
+  questionClosesAt        DateTime?   @db.Timestamptz(3)
+  startedAt               DateTime?   @db.Timestamptz(3)
+  endedAt                 DateTime?   @db.Timestamptz(3)
+  createdAt               DateTime    @default(now()) @db.Timestamptz(3)
+  stateVersion            Int         @default(0)
+  anonymizedAt            DateTime?   @db.Timestamptz(3)
+
+  participants Participant[]
+  answers      Answer[]
+  events       SessionEvent[]
+  bans         SessionBan[]
+
+  @@index([status, createdAt])
+  @@index([hostUserId, createdAt])
+  @@index([pin])
+  @@index([accountId, createdAt])
+}
+
+model Participant {
+  id                  String            @id @default(uuid()) @db.Uuid
+  gameSessionId       String            @db.Uuid
+  gameSession         GameSession       @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  nickname            String
+  normalizedNickname  String
+  sessionTokenHash    String            @unique
+  tokenExpiresAt      DateTime          @db.Timestamptz(3)
+  status              ParticipantStatus @default(ACTIVE)
+  totalScore          Int               @default(0)
+  correctCount        Int               @default(0)
+  /// Soma dos tempos de resposta das respostas corretas (desempate).
+  totalResponseTimeMs Int               @default(0)
+  finalRank           Int?
+  joinedAt            DateTime          @default(now()) @db.Timestamptz(3)
+  lastSeenAt          DateTime          @default(now()) @db.Timestamptz(3)
+
+  answers Answer[]
+
+  @@unique([gameSessionId, normalizedNickname])
+  @@index([gameSessionId, totalScore])
+}
+
+model Answer {
+  id                String      @id @default(uuid()) @db.Uuid
+  clientAnswerId    String      @unique @db.Uuid
+  gameSessionId     String      @db.Uuid
+  gameSession       GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  participantId     String      @db.Uuid
+  participant       Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  questionId        String      @db.Uuid
+  question          Question    @relation(fields: [questionId], references: [id])
+  /// IDs ordenados das alternativas escolhidas.
+  selectedOptionIds String[]    @db.Uuid
+  isCorrect         Boolean?
+  scoreAwarded      Int         @default(0)
+  responseTimeMs    Int
+  receivedAt        DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@unique([participantId, questionId])
+  @@index([gameSessionId, questionId])
+}
+
+model SessionEvent {
+  id            BigInt      @id @default(autoincrement())
+  gameSessionId String      @db.Uuid
+  gameSession   GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  sequence      Int
+  type          String
+  payload       Json        @default("{}")
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@unique([gameSessionId, sequence])
+}
+
+model SessionBan {
+  id                 String      @id @default(uuid()) @db.Uuid
+  gameSessionId      String      @db.Uuid
+  gameSession        GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  normalizedNickname String?
+  tokenHash          String?
+  createdAt          DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@index([gameSessionId, normalizedNickname])
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?  @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json     @default("{}")
+  ip         String?
+  requestId  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+/**
+ * --------------------------------------------------------------------------
+ */
+/**
+ * SaaS: contas, planos, cobrança, afiliados, despesas e notificações
+ */
+/**
+ * --------------------------------------------------------------------------
+ */
+
+enum PlanInterval {
+  NONE
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  FROZEN
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  RECEIVED
+  OVERDUE
+  CANCELED
+  REFUNDED
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
+  CANCELED
+}
+
+enum ExpenseCategory {
+  MARKETING
+  INFRA
+  PESSOAL
+  IMPOSTOS
+  FERRAMENTAS
+  OUTROS
+}
+
+model Plan {
+  /// Código estável: FREE, MONTHLY, YEARLY.
+  id              String       @id
+  name            String
+  description     String?
+  priceCents      Int          @default(0)
+  interval        PlanInterval @default(NONE)
+  /// null = ilimitado
+  maxQuizzes      Int?
+  maxParticipants Int
+  maxUsers        Int
+  features        Json         @default("[]")
+  /// Créditos de IA concedidos uma vez ao contratar o plano.
+  aiCreditsIncluded Int        @default(0)
+  active          Boolean      @default(true)
+  sortOrder       Int          @default(0)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
+
+  accounts Account[] @relation("AccountPlan")
+}
+
+model Account {
+  id                       String             @id @default(uuid()) @db.Uuid
+  name                     String
+  active                   Boolean            @default(true)
+  planId                   String             @default("FREE")
+  plan                     Plan               @relation("AccountPlan", fields: [planId], references: [id])
+  subscriptionStatus       SubscriptionStatus @default(ACTIVE)
+  /// Cortesia: plano sem cobrança (definido pelo master).
+  billingExempt            Boolean            @default(false)
+  currentPeriodStart       DateTime?          @db.Timestamptz(3)
+  /// Próxima renovação / vencimento.
+  currentPeriodEnd         DateTime?          @db.Timestamptz(3)
+  /// Mudança agendada para o fim do período (downgrade ou cancelamento).
+  pendingPlanId            String?
+  pendingChangeAt          DateTime?          @db.Timestamptz(3)
+  /// { quizIds: string[], userIds: string[] } a excluir quando a mudança for aplicada.
+  pendingRemovals          Json               @default("{}")
+  frozenAt                 DateTime?          @db.Timestamptz(3)
+  firstPaidAt              DateTime?          @db.Timestamptz(3)
+  canceledAt               DateTime?          @db.Timestamptz(3)
+  // Overrides dos limites/preço globais do plano (null = usa o global)
+  overrideMaxQuizzes       Int?
+  overrideUnlimitedQuizzes Boolean            @default(false)
+  overrideMaxParticipants  Int?
+  overrideMaxUsers         Int?
+  overridePriceCents       Int?
+  // Cobrança (Asaas)
+  billingName              String?
+  billingDocument          String?
+  billingEmail             String?
+  billingPhone             String?
+  asaasCustomerId          String?            @unique
+  asaasSubscriptionId      String?            @unique
+  // Afiliado
+  affiliateEnabled         Boolean            @default(false)
+  affiliateCode            String?            @unique
+  /// Percentual em pontos-base (2000 = 20%). null = percentual global.
+  affiliatePercentBp       Int?
+  pixKeyType               String?
+  pixKey                   String?
+  /// Saldo de créditos de IA (grátis do plano + comprados). Compras não expiram.
+  aiCreditsBalance         Int                @default(0)
+  referredByAccountId      String?            @db.Uuid
+  referredBy               Account?           @relation("Referrals", fields: [referredByAccountId], references: [id], onDelete: SetNull)
+  createdAt                DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime           @updatedAt @db.Timestamptz(3)
+
+  referrals          Account[]           @relation("Referrals")
+  users              User[]
+  quizzes            Quiz[]
+  sessions           GameSession[]
+  payments           Payment[]
+  commissionsEarned  Commission[]        @relation("AffiliateCommissions")
+  commissionsCaused  Commission[]        @relation("ReferredCommissions")
+  notifications      Notification[]
+  subscriptionEvents SubscriptionEvent[]
+  creditTransactions CreditTransaction[]
+  aiGenerations      AiGeneration[]
+
+  @@index([planId, subscriptionStatus])
+  @@index([createdAt])
+  @@index([referredByAccountId])
+}
+
+model Payment {
+  id                     String        @id @default(uuid()) @db.Uuid
+  accountId              String?       @db.Uuid
+  account                Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  /// Snapshot para manter o histórico financeiro após exclusão da conta.
+  accountName            String
+  planId                 String
+  amountCents            Int
+  netAmountCents         Int?
+  status                 PaymentStatus @default(PENDING)
+  /// SUBSCRIPTION (plano) ou CREDIT_PACK (compra avulsa de créditos de IA).
+  kind                   String        @default("SUBSCRIPTION")
+  /// Pacote comprado e créditos concedidos (quando kind = CREDIT_PACK).
+  creditPackId           String?       @db.Uuid
+  creditsGranted         Int?
+  billingType            String?
+  description            String?
+  dueDate                DateTime      @db.Timestamptz(3)
+  paidAt                 DateTime?     @db.Timestamptz(3)
+  periodStart            DateTime?     @db.Timestamptz(3)
+  periodEnd              DateTime?     @db.Timestamptz(3)
+  invoiceUrl             String?
+  provider               String        @default("asaas")
+  providerId             String?       @unique
+  providerSubscriptionId String?
+  createdAt              DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime      @updatedAt @db.Timestamptz(3)
+
+  commission Commission?
+
+  @@index([accountId, dueDate])
+  @@index([status, dueDate])
+  @@index([paidAt])
+}
+
+model SubscriptionEvent {
+  id            BigInt   @id @default(autoincrement())
+  accountId     String?  @db.Uuid
+  account       Account? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  /// SIGNUP, UPGRADE, DOWNGRADE, CANCEL, RENEW, FROZEN, UNFROZEN, DELETED
+  type          String
+  fromPlanId    String?
+  toPlanId      String?
+  /// Variação de MRR em centavos provocada pelo evento.
+  mrrDeltaCents Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([type, createdAt])
+  @@index([accountId])
+}
+
+model Commission {
+  id                 String           @id @default(uuid()) @db.Uuid
+  affiliateAccountId String?          @db.Uuid
+  affiliate          Account?         @relation("AffiliateCommissions", fields: [affiliateAccountId], references: [id], onDelete: SetNull)
+  referredAccountId  String?          @db.Uuid
+  referred           Account?         @relation("ReferredCommissions", fields: [referredAccountId], references: [id], onDelete: SetNull)
+  referredName       String
+  paymentId          String           @unique @db.Uuid
+  payment            Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  percentBp          Int
+  baseAmountCents    Int
+  amountCents        Int
+  status             CommissionStatus @default(PENDING)
+  paidAt             DateTime?        @db.Timestamptz(3)
+  paidNote           String?
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+
+  @@index([affiliateAccountId, status])
+}
+
+model Expense {
+  id          String          @id @default(uuid()) @db.Uuid
+  description String
+  category    ExpenseCategory @default(OUTROS)
+  channel     String?
+  amountCents Int
+  date        DateTime        @db.Date
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([date])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  accountId String    @db.Uuid
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId    String?   @db.Uuid
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, createdAt])
+}
+
+model NotificationDelivery {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String?  @db.Uuid
+  type      String
+  /// Chave de idempotência (ex.: id do pagamento, semana ISO).
+  refKey    String
+  toEmail   String
+  channel   String   @default("email")
+  /// SENT, FAILED, SKIPPED
+  status    String
+  error     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([type, refKey, toEmail])
+  @@index([createdAt])
+}
+
+model WebhookEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  provider   String
+  /// ID do evento no provedor (idempotência). Para o Asaas, o `id` do evento.
+  eventId    String
+  type       String?
+  paymentId  String?
+  receivedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([provider, eventId])
+  @@index([receivedAt])
+}
+
+model CreditPack {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  credits    Int
+  priceCents Int
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([active, sortOrder])
+}
+
+model CreditTransaction {
+  id           String   @id @default(uuid()) @db.Uuid
+  accountId    String?  @db.Uuid
+  account      Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Positivo credita, negativo debita.
+  delta        Int
+  balanceAfter Int
+  /// PLAN_GRANT, PURCHASE, GENERATION, MASTER_ADJUST, REFUND.
+  reason       String
+  /// Chave de idempotência (ex.: id do pagamento, id da geração).
+  refKey       String?
+  note         String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([reason, refKey])
+  @@index([accountId, createdAt])
+}
+
+model AiGeneration {
+  id         String   @id @default(uuid()) @db.Uuid
+  accountId  String?  @db.Uuid
+  account    Account? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  userId     String?  @db.Uuid
+  theme      String
+  level      String?
+  questionType String
+  count      Int
+  model      String?
+  status     String   @default("OK")
+  attachments Int     @default(0)
+  creditsUsed Int     @default(1)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, createdAt])
+}

@@ -1,0 +1,163 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/sora';
+
+@source '../../../packages/ui/src';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Paleta AZhoot (CLAUDE.md §6). Contraste validado para WCAG AA nos pares texto/fundo usados. */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Sora Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #2563eb;
+  --color-primary-strong: #1d4ed8;
+  --color-primary-foreground: #ffffff;
+  --color-deep: #0f2a5f;
+  --color-night: #0f172a;
+  --color-success: #16a34a;
+  --color-success-strong: #166534;
+  --color-warning: #f59e0b;
+  --color-warning-strong: #92400e;
+  --color-danger: #dc2626;
+  --color-accent: #7c3aed;
+
+  --color-background: var(--bg);
+  --color-surface: var(--surface);
+  --color-foreground: var(--fg);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-fg);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: #2563eb;
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-fg);
+
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+
+  --animate-pulse-ring: pulse-ring 2.4s ease-out infinite;
+  --animate-pop: pop 220ms ease-out;
+  --animate-rise: rise 250ms ease-out both;
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.55;
+    }
+    80%,
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+  @keyframes pop {
+    0% {
+      transform: scale(0.96);
+    }
+    60% {
+      transform: scale(1.02);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes rise {
+    from {
+      transform: translateY(8px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+}
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --fg: #0f172a;
+  --muted: #f1f5f9;
+  --muted-fg: #475569;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --secondary: #e0e7ff;
+  --secondary-fg: #1e3a8a;
+  --chart-1: #2563eb;
+  --chart-2: #d97706;
+  --chart-3: #0d9488;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0f172a;
+  --surface: #111c33;
+  --fg: #f1f5f9;
+  --muted: #1e293b;
+  --muted-fg: #a3b1c6;
+  --border: #243452;
+  --input: #334766;
+  --secondary: #1e2d52;
+  --secondary-fg: #dbe5ff;
+  --chart-1: #3b82f6;
+  --chart-2: #d97706;
+  --chart-3: #0d9488;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-background font-sans text-foreground antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3 {
+  @apply font-display;
+}
+
+:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* Fundo de ondas/pulsos usado em telas de apresentação e participante. */
+.bg-waves {
+  background-color: #0f172a;
+  background-image:
+    radial-gradient(1200px 600px at 110% -10%, rgba(37, 99, 235, 0.45), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(124, 58, 237, 0.22), transparent 60%),
+    repeating-radial-gradient(
+      circle at 50% 120%,
+      rgba(147, 197, 253, 0.06) 0 2px,
+      transparent 2px 36px
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
